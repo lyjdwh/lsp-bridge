@@ -168,23 +168,6 @@ auto completion does not pop up too aggressively."
     ("custom" . ("material" "apple-keyboard-option" "#ed6856"))
     (t . ("material" "file-find-outline" "#90cef1"))))
 
-(defvar lsp-bridge-buffer-parameters
-  '((mode-line-format . nil)
-    (header-line-format . nil)
-    (tab-line-format . nil)
-    (tab-bar-format . nil)
-    (frame-title-format . "")
-    (truncate-lines . t)
-    (cursor-in-non-selected-windows . nil)
-    (cursor-type . nil)
-    (show-trailing-whitespace . nil)
-    (display-line-numbers . nil)
-    (left-fringe-width . nil)
-    (right-fringe-width . 0)
-    (left-margin-width . 0)
-    (right-margin-width . 0)
-    (fringes-outside-margins . 0)))
-
 (defvar acm-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map [remap next-line] #'acm-select-next)
@@ -239,6 +222,18 @@ auto completion does not pop up too aggressively."
   "Ignore all mouse clicks.")
 
 (defface acm-default-face
+  '((((class color) (min-colors 88) (background dark)) :background "#191a1b")
+    (((class color) (min-colors 88) (background light)) :background "#f0f0f0")
+    (t :background "gray"))
+  "Default face, foreground and background colors used for the popup.")
+
+(defface acm-border-face
+  '((((class color) (min-colors 88) (background dark)) :background "#323232")
+    (((class color) (min-colors 88) (background light)) :background "#d7d7d7")
+    (t :background "gray"))
+  "The background color used for the thin border.")
+
+(defface acm-buffer-size-face
   '((t (:height 140)))
   "Face for content area.")
 
@@ -335,7 +330,7 @@ If COLOR-NAME is unknown to Emacs, then return COLOR-NAME as-is."
     (svg-image svg :ascent 'center :scale 1)))
 
 (defvar x-gtk-resize-child-frames) ;; not present on non-gtk builds
-(defun acm-make-frame (frame-name)
+(defun acm-make-frame (frame-name internal-border)
   (let* ((after-make-frame-functions nil)
          (parent (selected-frame))
          (x-gtk-resize-child-frames
@@ -347,6 +342,7 @@ If COLOR-NAME is unknown to Emacs, then return COLOR-NAME as-is."
                              (or (getenv "XDG_CURRENT_DESKTOP")
                                  (getenv "DESKTOP_SESSION") ""))
              'resize-mode)))
+         (border-width (if internal-border internal-border 1))
          frame)
     (setq frame (make-frame
                  `((name . ,frame-name)
@@ -359,7 +355,8 @@ If COLOR-NAME is unknown to Emacs, then return COLOR-NAME as-is."
                    (width . 0)
                    (height . 0)
                    (border-width . 0)
-                   (child-frame-border-width . 1)
+                   (internal-border-width . ,border-width)
+                   (child-frame-border-width . ,border-width)
                    (left-fringe . 0)
                    (right-fringe . 0)
                    (vertical-scroll-bars . nil)
@@ -376,8 +373,20 @@ If COLOR-NAME is unknown to Emacs, then return COLOR-NAME as-is."
                    (visibility . nil)
                    (no-special-glyphs . t)
                    (desktop-dont-save . t)
-                   (internal-border-width . 1)
                    )))
+
+    ;; Set frame border, if border-width more than 1 pixel, don't set border.
+    (when (equal border-width 1)
+      (let* ((face (if (facep 'child-frame-border) 'child-frame-border 'internal-border))
+             (new (face-attribute 'acm-border-face :background nil 'default)))
+        (unless (equal (face-attribute face :background frame 'default) new)
+          (set-face-background face new frame))))
+
+    ;; Set frame background.
+    (let ((new (face-attribute 'acm-default-face :background nil 'default)))
+      (unless (equal (frame-parameter frame 'background-color) new)
+        (set-frame-parameter frame 'background-color new)))
+
     (redirect-frame-focus frame parent)
     frame))
 
@@ -385,17 +394,31 @@ If COLOR-NAME is unknown to Emacs, then return COLOR-NAME as-is."
   (let ((theme-mode (format "%s" (frame-parameter nil 'background-mode))))
     (if (string-equal theme-mode "dark") "#191a1b" "#f0f0f0")))
 
-(defmacro acm-create-frame-if-not-exist (frame frame-buffer frame-name)
+(defmacro acm-create-frame-if-not-exist (frame frame-buffer frame-name &optional internal-border)
   `(unless (frame-live-p ,frame)
-     (setq ,frame (acm-make-frame ,frame-name))
+     (setq ,frame (acm-make-frame ,frame-name ,internal-border))
      (set-frame-parameter ,frame 'background-color (acm-frame-background-color))
 
      (with-current-buffer (get-buffer-create ,frame-buffer)
        ;; Install mouse ignore map
        (use-local-map acm--mouse-ignore-map)
-       (dolist (var lsp-bridge-buffer-parameters)
+       (dolist (var '((mode-line-format . nil)
+                      (header-line-format . nil)
+                      (tab-line-format . nil)
+                      (tab-bar-format . nil)
+                      (frame-title-format . "")
+                      (truncate-lines . t)
+                      (cursor-in-non-selected-windows . nil)
+                      (cursor-type . nil)
+                      (show-trailing-whitespace . nil)
+                      (display-line-numbers . nil)
+                      (left-fringe-width . nil)
+                      (right-fringe-width . nil)
+                      (left-margin-width . 0)
+                      (right-margin-width . 0)
+                      (fringes-outside-margins . 0)))
          (set (make-local-variable (car var)) (cdr var)))
-       (buffer-face-set 'acm-default-face))
+       (buffer-face-set 'acm-buffer-size-face))
 
      (let ((win (frame-root-window ,frame)))
        (set-window-buffer win ,frame-buffer)
@@ -606,7 +629,13 @@ If COLOR-NAME is unknown to Emacs, then return COLOR-NAME as-is."
                ))
 
         (when (equal item-index menu-index)
-          (add-face-text-property 0 (length candidate-line) 'acm-select-face 'append candidate-line))
+          (add-face-text-property 0 (length candidate-line) 'acm-select-face 'append candidate-line)
+
+          (when (and
+                 (not (string-equal (plist-get v :backend) "lsp"))
+                 (frame-live-p acm-doc-frame)
+                 (frame-visible-p acm-doc-frame))
+            (acm-doc-hide)))
 
         (insert candidate-line)
 
@@ -638,7 +667,7 @@ If COLOR-NAME is unknown to Emacs, then return COLOR-NAME as-is."
     (when (and candidate-doc
                (not (string-equal candidate-doc "")))
 
-      (acm-create-frame-if-not-exist acm-doc-frame acm-doc-buffer "acm doc frame")
+      (acm-create-frame-if-not-exist acm-doc-frame acm-doc-buffer "acm doc frame" 10)
 
       (with-current-buffer (get-buffer-create acm-doc-buffer)
         (visual-line-mode 1)
