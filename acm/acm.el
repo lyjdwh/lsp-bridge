@@ -390,15 +390,10 @@ If COLOR-NAME is unknown to Emacs, then return COLOR-NAME as-is."
     (redirect-frame-focus frame parent)
     frame))
 
-(defun acm-frame-background-color ()
-  (let ((theme-mode (format "%s" (frame-parameter nil 'background-mode))))
-    (if (string-equal theme-mode "dark") "#191a1b" "#f0f0f0")))
-
 (defmacro acm-create-frame-if-not-exist (frame frame-buffer frame-name &optional internal-border)
   `(unless (frame-live-p ,frame)
      (setq ,frame (acm-make-frame ,frame-name ,internal-border))
-     (set-frame-parameter ,frame 'background-color (acm-frame-background-color))
-
+     
      (with-current-buffer (get-buffer-create ,frame-buffer)
        ;; Install mouse ignore map
        (use-local-map acm--mouse-ignore-map)
