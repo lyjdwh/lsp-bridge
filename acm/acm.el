@@ -640,15 +640,12 @@ If COLOR-NAME is unknown to Emacs, then return COLOR-NAME as-is."
 
       (acm-create-frame-if-not-exist acm-doc-frame acm-doc-buffer "acm doc frame")
 
-      (set-frame-size acm-doc-frame
-                      (ceiling (* (frame-pixel-width acm-frame) 1.618))
-                      (ceiling (* (frame-pixel-height acm-frame) 0.618))
-                      t)
-
       (with-current-buffer (get-buffer-create acm-doc-buffer)
         (visual-line-mode 1)
         (erase-buffer)
         (insert candidate-doc))
+
+      (acm-set-frame-size acm-doc-frame)
 
       (acm-doc-adjust-pos)
       )))
