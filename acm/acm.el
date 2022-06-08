@@ -431,9 +431,17 @@ influence of C1 on the result."
           (setq candidates path-candidates)
 
         ;; Fetch syntax completion candidates.
-        (setq mode-candidates (append
-                               (acm-backend-elisp-candidates keyword)
-                               (acm-backend-lsp-candidates keyword)))
+        (setq mode-candidates (acm-candidate-sort-by-prefix
+                               keyword
+                               (cl-remove-duplicates
+                                (append
+                                 (acm-backend-dabbrev-candidates keyword)
+                                 (acm-backend-elisp-candidates keyword)
+                                 (acm-backend-lsp-candidates keyword))
+                                :test (lambda (c1 c2)
+                                        (string= (plist-get c1 :label)
+                                                 (plist-get c2 :label)))
+                                )))
 
         ;; Don't search snippet if char before keyword is not in `lsp-bridge-completion-trigger-characters'.
         (unless (member char-before-keyword lsp-bridge-completion-trigger-characters)

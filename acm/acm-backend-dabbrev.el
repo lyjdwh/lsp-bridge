@@ -88,6 +88,10 @@
   "Popup dabbrev completions when this option is turn on."
   :type 'boolean)
 
+(defcustom acm-enable-dabbrev-with-lsp nil
+  "Popup dabbrev completions with lsp when this option is turn on."
+  :type 'boolean)
+
 (defcustom acm-backend-dabbrev-min-length 4
   "Minimum length of dabbrev expansions.
 This setting ensures that words which are too short
@@ -125,6 +129,23 @@ auto completion does not pop up too aggressively."
         (acm-menu-render menu-old-cache))
 
       (setq acm-backend-dabbrev-completion-tick (acm-backend-dabbrev-auto-tick)))))
+
+
+(defun acm-backend-dabbrev-candidates (keyword)
+  (when acm-enable-dabbrev-with-lsp
+    (let* ((candidates (list))
+           (dabbrev-words (acm-backend-dabbrev-get-words keyword)))
+      (when (>= (length keyword) acm-backend-dabbrev-min-length)
+        (dolist (dabbrev-word (cl-subseq dabbrev-words 0 (min (length dabbrev-words) 10)))
+          (add-to-list 'candidates (list :key dabbrev-word
+                                         :icon "text"
+                                         :label dabbrev-word
+                                         :display-label dabbrev-word
+                                         :annotation "Dabbrev"
+                                         :backend "dabbrev") t)))
+
+      candidates
+      )))
 
 (defun acm-backend-dabbrev-get-words (word)
   "Find all dabbrev expansions for WORD."
